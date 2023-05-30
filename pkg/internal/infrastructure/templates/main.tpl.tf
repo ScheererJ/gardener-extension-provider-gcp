@@ -23,6 +23,7 @@ resource "google_service_account" "serviceaccount" {
 resource "google_compute_network" "network" {
   name                    = "{{ .clusterName }}"
   auto_create_subnetworks = "false"
+  enable_ula_internal_ipv6 = "false"
 
   timeouts {
     create = "5m"
@@ -37,6 +38,8 @@ resource "google_compute_subnetwork" "subnetwork-nodes" {
   ip_cidr_range = "{{ .networks.workers }}"
   network       = {{ .vpc.name }}
   region        = "{{ .google.region }}"
+  stack_type       = "IPV4_IPV6"
+  ipv6_access_type = "EXTERNAL"
 {{- if .networks.flowLogs }}
   log_config {
     {{ if .networks.flowLogs.aggregationInterval }}aggregation_interval = "{{ .networks.flowLogs.aggregationInterval }}"{{ end }}
@@ -133,9 +136,9 @@ resource "google_compute_firewall" "rule-allow-internal-access" {
   name          = "{{ .clusterName }}-allow-internal-access"
   network       = {{ .vpc.name }}
   {{ if .networks.internal -}}
-  source_ranges = ["{{ .networks.workers }}", "{{ .networks.internal }}", "{{ .podCIDR }}"]
+  source_ranges = ["{{ .networks.workers }}", "{{ .networks.internal }}"]
   {{ else -}}
-  source_ranges = ["{{ .networks.workers }}", "{{ .podCIDR }}"]
+  source_ranges = ["{{ .networks.workers }}"]
   {{ end -}}
 
   allow {
@@ -144,6 +147,36 @@ resource "google_compute_firewall" "rule-allow-internal-access" {
 
   allow {
     protocol = "ipip"
+  }
+
+  allow {
+    protocol = "tcp"
+    ports    = ["1-65535"]
+  }
+
+  allow {
+    protocol = "udp"
+    ports    = ["1-65535"]
+  }
+
+  timeouts {
+    create = "5m"
+    update = "5m"
+    delete = "5m"
+  }
+}
+
+resource "google_compute_firewall" "rule-allow-internal-access-ipv6" {
+  name          = "{{ .clusterName }}-allow-internal-access-ipv6"
+  network       = {{ .vpc.name }}
+  {{ if .networks.internal -}}
+  source_ranges = ["{{ .podCIDR }}"]
+  {{ else -}}
+  source_ranges = ["{{ .podCIDR }}"]
+  {{ end -}}
+
+  allow {
+    protocol = "58"
   }
 
   allow {
